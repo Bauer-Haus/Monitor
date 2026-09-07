@@ -1,6 +1,6 @@
 // DOM wiring: reads the controls into `state`, writes the derived numbers back out.
 
-import { state, DEFAULTS, PRESETS, screenMetrics, resolutionOf, matchPreset, encodeHash } from './config.js';
+import { state, DEFAULTS, PRESETS, screenMetrics, resolutionOf, matchPreset, encodeHash, HUMAN_HFOV } from './config.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -85,7 +85,7 @@ export function refreshStats(scene) {
   $('st-wrap').textContent = state.curved
     ? `${(m.wrap * 180 / Math.PI).toFixed(1)}° · ${state.curve}R`
     : 'flat panel';
-  $('st-hfov').textContent = `${fov.h.toFixed(1)}°`;
+  $('st-hfov').textContent = `${fov.h.toFixed(1)}° · ${Math.round((fov.h / HUMAN_HFOV) * 100)}% of vision`;
   $('st-vfov').textContent = `${fov.v.toFixed(1)}°`;
 
   const delta = scene.eyeY - scene.screenTopY;

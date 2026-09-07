@@ -8,7 +8,8 @@ Orbit around it, or drop into the seat and see what the panel actually covers fr
 
 ![overview](docs/preview-orbit.png)
 
-From the seat, with a 49″ 32:9 at 1000R:
+From the seat, with a 49″ 32:9 at 1000R — rendered at a 114° horizontal field of
+view, so the panel covers the same share of the frame as it would of your vision:
 
 ![eye level](docs/preview-eye.png)
 
@@ -34,7 +35,7 @@ root as-is.
 | Aspect ratio | 4:3 through 32:9 |
 | Curvature | flat, or a radius from 500R (extreme) to 4000R (gentle) |
 | Resolution | drives the pixel-density readout |
-| Bezel | 0–25 mm border around the active area |
+| Bezel | 0–25 mm border around the active area (the panel itself is modelled 1″ thick) |
 | Placement | height above the desk, tilt, desk height and depth |
 | Person | standing height 140–210 cm, eye-to-screen distance |
 | View | orbit, eye level, front, side, top |
@@ -52,6 +53,9 @@ hash, so **Copy shareable link** produces a link that restores the exact setup.
   radians and its edges sit `R(1 − cos(θ/2))` closer to you than its centre.
 * **Field of view** — the angle the panel subtends from the seated eye position,
   measured to the real edge positions, so the curve's forward wrap is included.
+  It is also reported as a share of the ~114° both eyes take in at once, which is
+  the field the eye-level view renders: the camera stays at the eye, so a panel
+  that overflows the frame is one that genuinely overflows your vision.
 * **Pixel density** — pixels per inch across the flat diagonal, plus the dot pitch.
 * **Eye vs. screen top** — how far the seated eye line falls above or below the top
   edge, the number that usually decides whether a monitor is mounted too low.

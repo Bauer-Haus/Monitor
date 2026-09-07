@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
-import { state, decodeHash, screenPoint } from './config.js';
+import { state, decodeHash, HUMAN_HFOV } from './config.js';
 import { buildRoom, Desk } from './room.js';
 import { Monitor } from './monitor.js';
 import { Person } from './person.js';
@@ -88,6 +88,8 @@ function updatePersonVisibility() {
   person.group.visible = state.showPerson && currentView !== 'eye';
 }
 
+let lastInfo = null;
+
 function rebuild() {
   const deskTop = state.deskHeight / 100;
   const deskDepth = state.deskDepth / 100;
@@ -110,16 +112,6 @@ function rebuild() {
   const bottomY = centre.y - Math.cos(THREE.MathUtils.degToRad(state.tilt)) * (m.height / 2);
 
   const eye = new THREE.Vector3(0, eyeY, eyeZ);
-
-  // bounding sphere of the visible panel, used to frame the camera
-  const corners = [];
-  for (const u of [-0.5, -0.25, 0, 0.25, 0.5]) {
-    const p = screenPoint(u, m);
-    for (const y of [-m.height / 2, m.height / 2]) {
-      corners.push(monitor.panelPivot.localToWorld(new THREE.Vector3(p.x, y, p.z)));
-    }
-  }
-  const screenSphere = new THREE.Sphere().setFromPoints(corners);
   guides.setVisible(state.guides);
   if (state.guides) guides.update(eye, monitor.panelPivot, m);
 
@@ -137,7 +129,41 @@ function rebuild() {
   });
   syncHash();
 
-  return { m, centre, eye, deskTop, screenSphere };
+  lastInfo = { m, centre, eye, deskTop };
+  return lastInfo;
+}
+
+// The eye-level view renders the human binocular span (HUMAN_HFOV), so the
+// monitor covers the same share of the frame as it would of your vision. Any
+// flat projection stretches the outer edges; that is the projection, not the
+// geometry. The vertical cap keeps tall, narrow windows from exploding.
+const HUMAN_VFOV_MAX = 118;
+
+/**
+ * Vertical camera FOV that makes the *visible* part of the canvas span
+ * `targetH` degrees horizontally, accounting for the control panel offset.
+ */
+function verticalFovForHorizontal(targetH) {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const off = camera.view?.enabled ? camera.view.fullWidth - camera.view.width : 0;
+  const target = THREE.MathUtils.degToRad(targetH);
+
+  // horizontal angle covered by the canvas, given a vertical FOV
+  const span = (v) => {
+    const halfTan = Math.tan(v / 2) * ((w + off) / h);
+    const right = halfTan * (2 * w / (w + off) - 1);
+    return Math.atan(right) + Math.atan(halfTan);
+  };
+
+  let lo = THREE.MathUtils.degToRad(20);
+  let hi = THREE.MathUtils.degToRad(HUMAN_VFOV_MAX);
+  if (span(hi) <= target) return HUMAN_VFOV_MAX;
+  for (let i = 0; i < 26; i++) {
+    const mid = (lo + hi) / 2;
+    if (span(mid) < target) lo = mid; else hi = mid;
+  }
+  return THREE.MathUtils.radToDeg((lo + hi) / 2);
 }
 
 /** Camera distance that frames a sphere of the given radius at the current aspect. */
@@ -170,25 +196,20 @@ function applyView(view, info) {
     controls.target.copy(target);
   };
 
+  const hint = document.getElementById('view-hint');
+  hint.hidden = view !== 'eye';
+  hint.textContent = view === 'eye'
+    ? `Rendered with a ${HUMAN_HFOV}° horizontal field of view, matching what both eyes take in at once.`
+    : '';
+
   switch (view) {
     case 'eye': {
-      // Sit in the person's seat. If the panel is too wide to take in from there,
-      // widen the lens up to a natural limit and then step straight back.
-      const sphere = info.screenSphere;
-      const dir = sphere.center.clone().sub(eye).normalize();
-      const distEye = Math.max(0.15, eye.distanceTo(sphere.center));
-      const needed = 2 * Math.asin(THREE.MathUtils.clamp(sphere.radius / distEye, 0, 0.985));
-      const limit = THREE.MathUtils.degToRad(70);
-
-      if (needed <= limit) {
-        camera.fov = Math.max(32, THREE.MathUtils.radToDeg(needed));
-        camera.position.copy(eye);
-      } else {
-        camera.fov = 70;
-        const back = sphere.radius / Math.sin(limit / 2);
-        camera.position.copy(sphere.center).addScaledVector(dir, -back);
-      }
+      // Sit in the person's seat and look at the screen with a human field of
+      // view: no stepping back, so a panel that overflows the frame is a panel
+      // that genuinely overflows your vision.
+      camera.fov = verticalFovForHorizontal(HUMAN_HFOV);
       camera.updateProjectionMatrix();
+      camera.position.copy(eye);
       controls.target.set(0, centre.y, centre.z);
       break;
     }
@@ -253,6 +274,9 @@ function resize() {
   else camera.clearViewOffset();
 
   camera.updateProjectionMatrix();
+
+  // the eye view's FOV depends on the window shape, so re-solve it
+  if (currentView === 'eye' && lastInfo) applyView('eye', lastInfo);
 }
 window.addEventListener('resize', resize);
 resize();

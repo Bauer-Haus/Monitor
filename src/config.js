@@ -2,6 +2,11 @@
 
 export const IN_TO_M = 0.0254;
 
+// Roughly the horizontal span both eyes take in at once. The full field of a
+// single eye is wider, but this binocular overlap is what reads as "what you
+// see", and it is what the eye-level view renders.
+export const HUMAN_HFOV = 114;
+
 export const DEFAULTS = {
   diagonal: 27,        // inches, measured flat/diagonally across the panel
   aspect: '16:9',

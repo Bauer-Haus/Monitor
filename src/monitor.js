@@ -3,8 +3,10 @@
 import * as THREE from 'three';
 import { screenMetrics, screenPoint } from './config.js';
 import { makeScreenTexture } from './screenTexture.js';
+import { roundedBox } from './geometry.js';
 
-const CHASSIS_DEPTH = 0.052;  // front-to-back thickness of the panel body
+const CHASSIS_DEPTH = 0.0254; // panel thickness: 1 inch, in line with current slim monitors
+const HOUSING_DEPTH = 0.026;  // the electronics bulge behind the middle of the panel
 const CHASSIS_BEVEL = 0.0025; // rounded lip around the chassis; the extrusion bulges forward by this much
 const BEZEL_LIFT = CHASSIS_BEVEL + 0.0015;   // bezel face sits just proud of the chassis
 const SCREEN_LIFT = BEZEL_LIFT + 0.0012;     // active screen sits just proud of the bezel
@@ -12,6 +14,7 @@ const SCREEN_LIFT = BEZEL_LIFT + 0.0012;     // active screen sits just proud of
 const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x23262b, roughness: 0.55, metalness: 0.25 });
 const bezelMaterial = new THREE.MeshStandardMaterial({ color: 0x121417, roughness: 0.42, metalness: 0.1 });
 const standMaterial = new THREE.MeshStandardMaterial({ color: 0x2b2f36, roughness: 0.4, metalness: 0.6 });
+const housingMaterial = new THREE.MeshStandardMaterial({ color: 0x1d2025, roughness: 0.6, metalness: 0.2 });
 
 /**
  * Horizontal cross-section of the panel as a THREE.Shape.
@@ -134,13 +137,27 @@ export class Monitor {
     this.disposables.push(screenGeo, screenMat, texture);
     this.panelPivot.add(screen);
 
+    // ---- rear housing --------------------------------------------------
+    // A 1 inch panel needs somewhere to put the electronics, so slim monitors
+    // carry a shallow raised block across the middle of the back.
+    const housingW = Math.min(m.width * 0.55, 0.42);
+    const housingH = Math.min(m.height * 0.62, 0.24);
+    const housingGeo = roundedBox(housingW, housingH, HOUSING_DEPTH, 0.02, 0.006);
+    const housing = new THREE.Mesh(housingGeo, housingMaterial);
+    housing.position.set(0, 0, -CHASSIS_DEPTH - HOUSING_DEPTH / 2 + 0.004);
+    housing.castShadow = true;
+    this.disposables.push(housingGeo);
+    this.panelPivot.add(housing);
+
     // ---- stand ---------------------------------------------------------
+    const columnZ = -CHASSIS_DEPTH - HOUSING_DEPTH - 0.028;
+
     const baseW = THREE.MathUtils.clamp(m.width * 0.28, 0.16, 0.34);
     const baseD = THREE.MathUtils.clamp(m.height * 0.42, 0.13, 0.24);
     const baseGeo = new THREE.CylinderGeometry(baseW / 2, baseW / 2, 0.016, 32);
     baseGeo.scale(1, 1, baseD / baseW);
     const base = new THREE.Mesh(baseGeo, standMaterial);
-    base.position.set(0, 0.008, -CHASSIS_DEPTH - 0.03);
+    base.position.set(0, 0.008, columnZ);
     base.castShadow = true;
     base.receiveShadow = true;
     this.disposables.push(baseGeo);
@@ -149,14 +166,17 @@ export class Monitor {
     const neckH = Math.max(0.04, riser + m.height * 0.35);
     const neckGeo = new THREE.BoxGeometry(0.075, neckH, 0.03);
     const neck = new THREE.Mesh(neckGeo, standMaterial);
-    neck.position.set(0, neckH / 2, -CHASSIS_DEPTH - 0.03);
+    neck.position.set(0, neckH / 2, columnZ);
     neck.castShadow = true;
     this.disposables.push(neckGeo);
     this.stand.add(neck);
 
-    const armGeo = new THREE.BoxGeometry(0.075, 0.05, 0.032 + CHASSIS_DEPTH * 0.6);
+    // bridges the column to the back of the panel; its front end hides inside the body
+    const armBack = columnZ - 0.02;
+    const armFront = -CHASSIS_DEPTH * 0.4;
+    const armGeo = new THREE.BoxGeometry(0.075, 0.05, armFront - armBack);
     const arm = new THREE.Mesh(armGeo, standMaterial);
-    arm.position.set(0, riser + m.height * 0.35, -CHASSIS_DEPTH * 0.7);
+    arm.position.set(0, riser + m.height * 0.35, (armFront + armBack) / 2);
     arm.castShadow = true;
     this.disposables.push(armGeo);
     this.stand.add(arm);
