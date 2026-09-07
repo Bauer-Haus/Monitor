@@ -15,17 +15,25 @@ view, so the panel covers the same share of the frame as it would of your vision
 
 ## Running it
 
-Everything is static — HTML, CSS and ES modules, with three.js vendored into
-`vendor/`. There is no build step and no network access at runtime, but ES modules
-need to be served over HTTP (opening `index.html` from the filesystem will not work):
+The site lives in `public/`. Everything in it is static — HTML, CSS and ES modules,
+with three.js vendored alongside. There is no build step and no network access at
+runtime, but ES modules need to be served over HTTP (opening `index.html` from the
+filesystem will not work):
 
 ```bash
-python3 -m http.server 8000
+python3 -m http.server 8000 -d public
 # then open http://localhost:8000
 ```
 
-Any static host works for deployment, GitHub Pages included — publish the repository
-root as-is.
+## Deploying
+
+Any static host works. Serve `public/` as the site root — the repository root holds
+the README screenshots and licence, which do not belong on the CDN.
+
+On **Cloudflare Pages**: framework preset *None*, build command empty, build output
+directory `public`. `public/_headers` then applies the caching policy: the versioned
+`vendor/three-0.160.1/` path is immutable for a year, while the app's own files
+revalidate on every load so a deploy never leaves stale code in a browser cache.
 
 ## What you can change
 
@@ -67,20 +75,23 @@ eye line moves sensibly with the height slider.
 ## Layout
 
 ```
-index.html          markup, control panel, import map
-styles.css          UI styling
-src/config.js       state, presets, screen maths, URL encoding
-src/main.js         scene assembly, layout, camera views, render loop
-src/monitor.js      chassis / bezel / screen geometry and the stand
-src/person.js       seated mannequin and chair
-src/room.js         floor, walls and desk
-src/guides.js       field-of-view overlay lines
-src/screenTexture.js  procedurally drawn screen contents
-src/geometry.js     rounded-box helper
-vendor/three/       three.js r160 (MIT), vendored so the page needs no CDN
+public/                     everything that gets deployed
+  index.html                markup, control panel, import map
+  styles.css                UI styling
+  _headers                  Cloudflare Pages caching and security headers
+  src/config.js             state, presets, screen maths, URL encoding
+  src/main.js               scene assembly, layout, camera views, render loop
+  src/monitor.js            chassis / bezel / screen geometry and the stand
+  src/person.js             seated mannequin and chair
+  src/room.js               floor, walls and desk
+  src/guides.js             field-of-view overlay lines
+  src/screenTexture.js      procedurally drawn screen contents
+  src/geometry.js           rounded-box helper
+  vendor/three-0.160.1/     three.js r160 (MIT), vendored so the page needs no CDN
+docs/                       README screenshots, not deployed
 ```
 
 ## Licence
 
 Project code is MIT. Vendored three.js keeps its own MIT licence in
-`vendor/three/LICENSE`.
+`public/vendor/three-0.160.1/LICENSE`.

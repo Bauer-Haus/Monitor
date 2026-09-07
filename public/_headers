@@ -1,0 +1,25 @@
+# Cloudflare Pages reads this file from the root of the build output.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+# The three.js path carries its version, so an upgrade lands on a new URL and
+# these can be cached indefinitely. This is the 656 KB that repeat visits skip.
+/vendor/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# App code keeps its filenames across deploys, so it has to be revalidated
+# every load or a deploy would leave stale JS in browser caches. Revalidation
+# is an ETag round trip, and these files are a few KB each.
+/src/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+/styles.css
+  Cache-Control: public, max-age=0, must-revalidate
+
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/
+  Cache-Control: public, max-age=0, must-revalidate
