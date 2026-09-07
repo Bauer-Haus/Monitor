@@ -4,7 +4,7 @@ import { state, DEFAULTS, PRESETS, screenMetrics, resolutionOf, matchPreset, enc
 
 const $ = (id) => document.getElementById(id);
 
-const RANGES = ['diagonal', 'curve', 'bezel', 'riser', 'tilt', 'deskHeight', 'deskDepth', 'personHeight', 'distance'];
+const RANGES = ['diagonal', 'curve', 'bezel', 'riser', 'tilt', 'deskWidth', 'deskHeight', 'deskDepth', 'personHeight', 'distance'];
 const SELECTS = ['sizeMode', 'aspect', 'resolution', 'content'];
 const CHECKS = ['curved', 'showPerson', 'guides', 'units'];
 const NUMBERS = ['panelW', 'panelH'];
@@ -111,6 +111,7 @@ export function refreshLabels() {
   $('bezel-out').textContent = metric ? `${state.bezel} mm` : `${(state.bezel / 25.4).toFixed(2)} in`;
   $('riser-out').textContent = metric ? `${state.riser} cm` : `${(state.riser / 2.54).toFixed(1)} in`;
   $('tilt-out').textContent = `${state.tilt}°`;
+  $('deskWidth-out').textContent = metric ? `${state.deskWidth} cm` : `${(state.deskWidth / 2.54).toFixed(1)} in`;
   $('deskHeight-out').textContent = metric ? `${state.deskHeight} cm` : `${(state.deskHeight / 2.54).toFixed(1)} in`;
   $('deskDepth-out').textContent = metric ? `${state.deskDepth} cm` : `${(state.deskDepth / 2.54).toFixed(1)} in`;
   $('personHeight-out').textContent = metric
@@ -147,6 +148,13 @@ export function refreshStats(scene) {
   $('st-hfov').textContent = `${fov.h.toFixed(1)}° · ${Math.round((fov.h / HUMAN_HFOV) * 100)}% of vision`;
   $('st-vfov').textContent = `${fov.v.toFixed(1)}°`;
 
+  const deskWidth = state.deskWidth / 100;
+  const panelSpan = m.chord + (state.bezel / 1000) * 2;
+  const slack = deskWidth - panelSpan;
+  $('st-desk').textContent = slack >= 0
+    ? `${fmtLen(slack / 2, metric)} spare each side`
+    : `overhangs by ${fmtLen(-slack / 2, metric)} each side`;
+
   const delta = scene.eyeY - scene.screenTopY;
   $('st-eye').textContent = Math.abs(delta) < 0.005
     ? 'level with the top edge'
@@ -158,6 +166,8 @@ export function refreshStats(scene) {
   } else if (state.curved && distance < m.radius * 0.45) {
     notes.push('You are much closer than the curve radius, so the edges wrap noticeably around you.');
   }
+  if (slack < 0) notes.push('The monitor is wider than the desk — it would hang over both edges.');
+  else if (slack < 0.1) notes.push('The monitor only just fits the desk width.');
   if (fov.h > 100) notes.push('Over 100° wide: expect to turn your head to reach the edges.');
   else if (fov.h < 25) notes.push('Under 25° wide: the screen occupies a small part of your vision — you could sit closer.');
   if (scene.eyeY < scene.screenBottomY) notes.push('Your eyes are below the bottom edge — the screen is mounted quite high.');

@@ -46,7 +46,8 @@ revalidate on every load so a deploy never leaves stale code in a browser cache.
 | Curvature | flat, or a radius from 500R (extreme) to 4000R (gentle) |
 | Resolution | drives the pixel-density readout |
 | Bezel | 0–25 mm frame around the image area (the panel itself is modelled 1″ thick) |
-| Placement | height above the desk, tilt, desk height and depth |
+| Placement | height above the desk, tilt |
+| Desk | width 80–300 cm, height 55–110 cm, depth 45–100 cm |
 | Person | standing height 140–210 cm, eye-to-screen distance |
 | View | orbit, eye level, front, side, top |
 | Guides | draws the field-of-view cone and the screen's arc |
@@ -74,6 +75,9 @@ hash, so **Copy shareable link** produces a link that restores the exact setup.
 * **Pixel density** — pixels per inch across the flat diagonal, plus the dot pitch.
 * **Eye vs. screen top** — how far the seated eye line falls above or below the top
   edge, the number that usually decides whether a monitor is mounted too low.
+* **Desk clearance** — how much desk is left either side of the monitor, or how far
+  it overhangs. A curved panel is measured across its chord, since that is the space
+  it actually occupies, plus the bezel.
 
 Seated proportions come from the usual anthropometric fractions of standing height
 (seat height ≈ 0.25·H, seated eye height ≈ 0.455·H above the seat), so the figure's

@@ -97,7 +97,7 @@ function rebuild() {
   monitor.group.position.set(0, deskTop, 0);
   const m = monitor.update(state);
 
-  const deskWidth = THREE.MathUtils.clamp(m.width + 0.5, 1.3, 3.2);
+  const deskWidth = state.deskWidth / 100;
   desk.update(deskTop, deskDepth, deskWidth, DESK_BACK_Z);
 
   const stature = state.personHeight / 100;
@@ -116,7 +116,7 @@ function rebuild() {
   if (state.guides) guides.update(eye, monitor.panelPivot, m);
 
   // shadow + camera framing follow the size of the setup
-  const span = Math.max(1.6, m.width * 0.8 + 1.2);
+  const span = Math.max(1.6, m.width * 0.8 + 1.2, deskWidth * 0.6 + 0.4);
   sc.left = -span; sc.right = span; sc.top = span; sc.bottom = -1.2;
   sc.updateProjectionMatrix();
 
@@ -180,7 +180,7 @@ function applyView(view, info) {
 
   // everything worth seeing sits inside this sphere
   const focus = new THREE.Vector3(0, deskTop * 0.75, 0.45);
-  const radius = Math.max(m.width, 1.1) * 0.5 + 0.75;
+  const radius = Math.max(m.width, (state.deskWidth / 100) * 0.8, 1.1) * 0.5 + 0.75;
 
   const place = (fov, azimuthDeg, elevationDeg, target, r = radius) => {
     camera.fov = fov;

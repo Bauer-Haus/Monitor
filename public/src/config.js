@@ -19,6 +19,7 @@ export const DEFAULTS = {
   bezel: 7,            // mm
   riser: 8,            // cm, screen bottom above the desk surface
   tilt: 5,             // degrees, positive tilts the top away from the viewer
+  deskWidth: 140,      // cm, left to right
   deskHeight: 74,      // cm
   deskDepth: 75,       // cm
   personHeight: 175,   // cm
