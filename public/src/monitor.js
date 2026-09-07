@@ -20,14 +20,14 @@ const housingMaterial = new THREE.MeshStandardMaterial({ color: 0x1d2025, roughn
  * Horizontal cross-section of the panel as a THREE.Shape.
  * Shape-space y maps to -z once the extrusion is rotated upright.
  */
-function chassisShape(m, depth) {
+function chassisShape(m, depth, span = 1) {
   const shape = new THREE.Shape();
   const SEG = 48;
 
   const front = [];
   const back = [];
   for (let i = 0; i <= SEG; i++) {
-    const u = -0.5 + i / SEG;
+    const u = (-0.5 + i / SEG) * span;
     const f = screenPoint(u, m);
     front.push([f.x, -f.z]);
     if (isFinite(m.radius)) {
@@ -110,26 +110,30 @@ export class Monitor {
     const m = screenMetrics(state);
     this.metrics = m;
 
-    const bezel = Math.min(state.bezel / 1000, m.height / 3);
+    // The metrics describe the active image area, so the bezel is added around
+    // it: a 598 mm panel renders 598 mm of picture, exactly as typed.
+    const bezel = state.bezel / 1000;
+    const outerW = m.width + bezel * 2;
+    const outerH = m.height + bezel * 2;
     const riser = state.riser / 100;
 
     // ---- chassis -------------------------------------------------------
-    const shape = chassisShape(m, CHASSIS_DEPTH);
-    const chassis = new THREE.Mesh(extrudeUpright(shape, m.height), bodyMaterial);
+    const shape = chassisShape(m, CHASSIS_DEPTH, outerW / m.width);
+    const chassis = new THREE.Mesh(extrudeUpright(shape, outerH), bodyMaterial);
     chassis.castShadow = true;
     chassis.receiveShadow = true;
     this.disposables.push(chassis.geometry);
     this.panelPivot.add(chassis);
 
     // ---- bezel face (matte black frame just in front of the chassis) ----
-    const bezelGeo = surfaceGeometry(m, m.width, m.height, BEZEL_LIFT);
+    const bezelGeo = surfaceGeometry(m, outerW, outerH, BEZEL_LIFT);
     const bezelMesh = new THREE.Mesh(bezelGeo, bezelMaterial);
     this.disposables.push(bezelGeo);
     this.panelPivot.add(bezelMesh);
 
     // ---- active screen -------------------------------------------------
-    const screenW = Math.max(0.02, m.width - bezel * 2);
-    const screenH = Math.max(0.02, m.height - bezel * 2);
+    const screenW = m.width;
+    const screenH = m.height;
     const screenGeo = surfaceGeometry(m, screenW, screenH, SCREEN_LIFT);
     const texture = makeScreenTexture(state.content, screenW / screenH);
     const screenMat = new THREE.MeshBasicMaterial({ map: texture, toneMapped: true });
@@ -182,7 +186,9 @@ export class Monitor {
     this.stand.add(arm);
 
     // ---- placement -----------------------------------------------------
-    this.panelPivot.position.set(0, riser + m.height / 2, 0);
+    // `riser` is the height of the image area's bottom edge; lift the panel if
+    // the bezel below it would otherwise sink into the desk.
+    this.panelPivot.position.set(0, Math.max(riser + m.height / 2, outerH / 2), 0);
     this.panelPivot.rotation.x = -THREE.MathUtils.degToRad(state.tilt);
 
     this.screenCentre.set(0, this.group.position.y + this.panelPivot.position.y, this.group.position.z);

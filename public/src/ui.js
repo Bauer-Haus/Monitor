@@ -5,10 +5,62 @@ import { state, DEFAULTS, PRESETS, screenMetrics, resolutionOf, matchPreset, enc
 const $ = (id) => document.getElementById(id);
 
 const RANGES = ['diagonal', 'curve', 'bezel', 'riser', 'tilt', 'deskHeight', 'deskDepth', 'personHeight', 'distance'];
-const SELECTS = ['aspect', 'resolution', 'content'];
+const SELECTS = ['sizeMode', 'aspect', 'resolution', 'content'];
 const CHECKS = ['curved', 'showPerson', 'guides', 'units'];
+const NUMBERS = ['panelW', 'panelH'];
+
+// `units` and `sizeMode` are wired by hand: both need work done in a set order
+// around the value they change, so they are kept out of the generic handler.
+const SELF_WIRED = new Set(['units', 'sizeMode']);
 
 const M_TO_IN = 39.3701;
+const MM_LIMITS = { panelW: [40, 2500], panelH: [30, 1600] };
+
+// Manual dimensions are held in millimetres and drawn in whichever unit is
+// active; `displayMetric` tracks the unit the boxes currently hold, so a
+// units toggle cannot be misread as the user retyping the number.
+let displayMetric = DEFAULTS.units;
+const mmPerUnit = (metric) => (metric ? 1 : 25.4);
+
+function readNumberInputs() {
+  const f = mmPerUnit(displayMetric);
+  for (const id of NUMBERS) {
+    const raw = $(id).value.trim();
+    if (raw === '') continue;                       // mid-edit: keep the last good value
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    const [lo, hi] = MM_LIMITS[id];
+    state[id] = Math.round(Math.min(hi, Math.max(lo, n * f)) * 10) / 10;
+  }
+}
+
+function writeNumberInputs() {
+  displayMetric = state.units;
+  const f = mmPerUnit(displayMetric);
+  for (const id of NUMBERS) {
+    const [lo, hi] = MM_LIMITS[id];
+    const el = $(id);
+    el.min = (lo / f).toFixed(1);
+    el.max = (hi / f).toFixed(1);
+    el.step = displayMetric ? 0.5 : 0.05;
+    el.value = (state[id] / f).toFixed(displayMetric ? 1 : 2);
+  }
+  const label = displayMetric ? 'mm' : 'in';
+  $('panelW-unit').textContent = label;
+  $('panelH-unit').textContent = label;
+}
+
+/** Closest listed aspect ratio to a width/height ratio, for leaving manual mode. */
+function nearestAspect(ratio) {
+  let best = state.aspect;
+  let bestDelta = Infinity;
+  for (const opt of $('aspect').options) {
+    const [w, h] = opt.value.split(':').map(Number);
+    const delta = Math.abs(w / h - ratio);
+    if (delta < bestDelta) { bestDelta = delta; best = opt.value; }
+  }
+  return best;
+}
 
 function fmtLen(metres, metric, digits = 1) {
   return metric
@@ -41,12 +93,14 @@ export function readControls() {
   for (const id of RANGES) state[id] = Number($(id).value);
   for (const id of SELECTS) state[id] = $(id).value;
   for (const id of CHECKS) state[id] = $(id).checked;
+  readNumberInputs();
 }
 
 export function writeControls() {
   for (const id of RANGES) $(id).value = state[id];
   for (const id of SELECTS) $(id).value = state[id];
   for (const id of CHECKS) $(id).checked = state[id];
+  writeNumberInputs();
   $('preset').value = matchPreset(state);
 }
 
@@ -64,6 +118,10 @@ export function refreshLabels() {
     : `${Math.floor(state.personHeight / 2.54 / 12)}′${Math.round((state.personHeight / 2.54) % 12)}″`;
   $('distance-out').textContent = metric ? `${state.distance} cm` : `${(state.distance / 2.54).toFixed(0)} in`;
   $('curve-field').classList.toggle('disabled', !state.curved);
+
+  const manual = state.sizeMode === 'manual';
+  $('size-diagonal').hidden = manual;
+  $('size-manual').hidden = !manual;
 }
 
 /** @param {{eyeY:number, screenTopY:number, screenBottomY:number, distance?:number}} scene */
@@ -75,9 +133,10 @@ export function refreshStats(scene) {
   const fov = fieldOfView(m, distance);
 
   $('st-size').textContent = `${fmtLen(m.width, metric)} × ${fmtLen(m.height, metric)}`;
+  $('st-diagonal').textContent = `${fmtLen(m.diag, metric)} · ${m.ratio.toFixed(2)}:1`;
   $('st-area').textContent = fmtArea(m.width * m.height, metric);
 
-  const ppi = Math.hypot(res.w, res.h) / state.diagonal;
+  const ppi = Math.hypot(res.w, res.h) / m.diagonalIn;
   const pitch = (m.width * 1000) / res.w;
   $('st-ppi').textContent = `${ppi.toFixed(0)} PPI · ${pitch.toFixed(3)} mm pitch`;
 
@@ -116,15 +175,41 @@ export function initUI({ onChange, onView, onReset, onLayout }) {
   }
 
   const handle = () => { readControls(); onChange(); };
-  for (const id of [...RANGES, ...SELECTS, ...CHECKS]) {
+  for (const id of [...RANGES, ...NUMBERS, ...SELECTS, ...CHECKS]) {
+    if (SELF_WIRED.has(id)) continue;
     $(id).addEventListener('input', handle);
     $(id).addEventListener('change', handle);
   }
 
+  // Switching modes carries the current size across, so the monitor on screen
+  // does not jump when you change how you describe it.
+  $('sizeMode').addEventListener('change', () => {
+    const next = $('sizeMode').value;
+    if (next === state.sizeMode) return;
+    const m = screenMetrics(state);
+    if (next === 'manual') {
+      state.panelW = Math.round(m.width * 10000) / 10;
+      state.panelH = Math.round(m.height * 10000) / 10;
+    } else {
+      state.aspect = nearestAspect(m.ratio);
+      state.diagonal = Math.min(65, Math.max(13, Math.round(m.diagonalIn * 2) / 2));
+    }
+    state.sizeMode = next;
+    writeControls();
+    onChange();
+  });
+
+  // Redraw the manual boxes in the new unit rather than reinterpreting them.
+  $('units').addEventListener('change', () => {
+    state.units = $('units').checked;
+    writeNumberInputs();
+    onChange();
+  });
+
   presetSel.addEventListener('change', () => {
     const preset = PRESETS.find((p) => p.id === presetSel.value);
     if (!preset || !preset.p) return;
-    Object.assign(state, preset.p);
+    Object.assign(state, { sizeMode: 'diagonal' }, preset.p);
     writeControls();
     onChange();
   });

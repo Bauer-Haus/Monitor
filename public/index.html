@@ -41,22 +41,47 @@
         <h2>Screen</h2>
 
         <label class="field">
-          <span class="label">Diagonal <output id="diagonal-out"></output></span>
-          <input type="range" id="diagonal" min="13" max="65" step="0.5" value="27" />
-        </label>
-
-        <label class="field">
-          <span class="label">Aspect ratio</span>
-          <select id="aspect">
-            <option value="4:3">4:3 — classic</option>
-            <option value="3:2">3:2</option>
-            <option value="16:10">16:10</option>
-            <option value="16:9" selected>16:9 — widescreen</option>
-            <option value="21:9">21:9 — ultrawide</option>
-            <option value="32:9">32:9 — super ultrawide</option>
-            <option value="32:10">32:10</option>
+          <span class="label">Size from</span>
+          <select id="sizeMode">
+            <option value="diagonal" selected>Diagonal + aspect ratio</option>
+            <option value="manual">Exact width × height</option>
           </select>
         </label>
+
+        <div id="size-diagonal">
+          <label class="field">
+            <span class="label">Diagonal <output id="diagonal-out"></output></span>
+            <input type="range" id="diagonal" min="13" max="65" step="0.5" value="27" />
+          </label>
+
+          <label class="field">
+            <span class="label">Aspect ratio</span>
+            <select id="aspect">
+              <option value="4:3">4:3 — classic</option>
+              <option value="3:2">3:2</option>
+              <option value="16:10">16:10</option>
+              <option value="16:9" selected>16:9 — widescreen</option>
+              <option value="21:9">21:9 — ultrawide</option>
+              <option value="32:9">32:9 — super ultrawide</option>
+              <option value="32:10">32:10</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="size-manual" hidden>
+          <div class="pair">
+            <label class="field">
+              <span class="label">Width <output id="panelW-unit"></output></span>
+              <input type="number" id="panelW" step="0.1" inputmode="decimal" />
+            </label>
+            <label class="field">
+              <span class="label">Height <output id="panelH-unit"></output></span>
+              <input type="number" id="panelH" step="0.1" inputmode="decimal" />
+            </label>
+          </div>
+          <span class="hint">The active image area, excluding the bezel — the figure spec
+            sheets list as “display area” or “viewable image size”.</span>
+        </div>
 
         <label class="field checkbox">
           <input type="checkbox" id="curved" />
@@ -171,7 +196,8 @@
       <section id="stats">
         <h2>Numbers</h2>
         <dl>
-          <div><dt>Panel size</dt><dd id="st-size">—</dd></div>
+          <div><dt>Image area</dt><dd id="st-size">—</dd></div>
+          <div><dt>Diagonal</dt><dd id="st-diagonal">—</dd></div>
           <div><dt>Screen area</dt><dd id="st-area">—</dd></div>
           <div><dt>Pixel density</dt><dd id="st-ppi">—</dd></div>
           <div><dt>Curve depth</dt><dd id="st-sagitta">—</dd></div>

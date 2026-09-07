@@ -8,8 +8,11 @@ export const IN_TO_M = 0.0254;
 export const HUMAN_HFOV = 114;
 
 export const DEFAULTS = {
-  diagonal: 27,        // inches, measured flat/diagonally across the panel
+  sizeMode: 'diagonal', // 'diagonal' (diagonal + aspect) or 'manual' (exact width x height)
+  diagonal: 27,        // inches, measured flat/diagonally across the image area
   aspect: '16:9',
+  panelW: 598,         // mm, image area width — used in manual mode (matches 27" 16:9)
+  panelH: 336,         // mm, image area height
   curved: false,
   curve: 1800,         // curvature radius in mm
   resolution: '2560x1440',
@@ -58,23 +61,32 @@ export function resolutionOf(res) {
 }
 
 /**
- * All derived screen geometry, in metres.
- * The diagonal of a curved monitor is quoted as if the panel were flattened,
- * so the flat width/height below are also the arc length / height of the curve.
+ * All derived screen geometry, in metres. `width` and `height` describe the
+ * active image area — the figure a spec sheet quotes, and what the diagonal
+ * measures. The diagonal of a curved monitor is quoted as if the panel were
+ * flattened, so `width` is also the arc length of the curve.
  */
 export function screenMetrics(s = state) {
+  const manual = s.sizeMode === 'manual';
   const { w, h } = aspectRatio(s.aspect);
   const hyp = Math.hypot(w, h);
-  const diag = s.diagonal * IN_TO_M;
-  const width = (diag * w) / hyp;    // arc length for a curved panel
-  const height = (diag * h) / hyp;
+
+  const width = manual ? s.panelW / 1000 : (s.diagonal * IN_TO_M * w) / hyp;
+  const height = manual ? s.panelH / 1000 : (s.diagonal * IN_TO_M * h) / hyp;
+  const diag = Math.hypot(width, height);
 
   const radius = s.curved ? s.curve / 1000 : Infinity;
   const wrap = s.curved ? width / radius : 0;                       // radians
   const sagitta = s.curved ? radius * (1 - Math.cos(wrap / 2)) : 0; // curve depth
   const chord = s.curved ? 2 * radius * Math.sin(wrap / 2) : width; // edge-to-edge straight line
 
-  return { width, height, diag, radius, wrap, sagitta, chord, aspectW: w, aspectH: h };
+  return {
+    width, height, diag, radius, wrap, sagitta, chord,
+    diagonalIn: diag / IN_TO_M,
+    ratio: height > 0 ? width / height : 1,
+    aspectW: manual ? width : w,
+    aspectH: manual ? height : h,
+  };
 }
 
 /** Point on the screen's horizontal centre-line, u in [-0.5, 0.5]. Local space, screen centre at origin, facing +Z. */
@@ -88,8 +100,12 @@ export function screenPoint(u, m) {
 
 export function encodeHash(s = state) {
   const parts = [];
+  const manual = s.sizeMode === 'manual';
   for (const k of KEYS) {
     if (s[k] === DEFAULTS[k]) continue;
+    // only the fields the active size mode actually uses
+    if (!manual && (k === 'panelW' || k === 'panelH')) continue;
+    if (manual && (k === 'diagonal' || k === 'aspect')) continue;
     parts.push(`${k}=${encodeURIComponent(typeof s[k] === 'boolean' ? (s[k] ? 1 : 0) : s[k])}`);
   }
   return parts.join('&');
@@ -113,6 +129,7 @@ export function decodeHash(hash, s = state) {
 }
 
 export function matchPreset(s = state) {
+  if (s.sizeMode === 'manual') return 'custom';
   for (const preset of PRESETS) {
     if (!preset.p) continue;
     const ok = Object.entries(preset.p).every(([k, v]) => s[k] === v);

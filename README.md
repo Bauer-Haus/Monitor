@@ -39,11 +39,13 @@ revalidate on every load so a deploy never leaves stale code in a browser cache.
 
 | Control | Notes |
 | --- | --- |
+| Size from | diagonal + aspect ratio, or an exact width × height |
 | Diagonal | 13″–65″, the usual flat-panel measurement |
 | Aspect ratio | 4:3 through 32:9 |
+| Width × height | the active image area in mm or inches, straight off a spec sheet |
 | Curvature | flat, or a radius from 500R (extreme) to 4000R (gentle) |
 | Resolution | drives the pixel-density readout |
-| Bezel | 0–25 mm border around the active area (the panel itself is modelled 1″ thick) |
+| Bezel | 0–25 mm frame around the image area (the panel itself is modelled 1″ thick) |
 | Placement | height above the desk, tilt, desk height and depth |
 | Person | standing height 140–210 cm, eye-to-screen distance |
 | View | orbit, eye level, front, side, top |
@@ -54,9 +56,14 @@ hash, so **Copy shareable link** produces a link that restores the exact setup.
 
 ## The numbers it reports
 
-* **Panel size** — a diagonal *d* at aspect *w:h* gives width `d·w/√(w²+h²)` and
+* **Image area** — a diagonal *d* at aspect *w:h* gives width `d·w/√(w²+h²)` and
   height `d·h/√(w²+h²)`. A curved panel is quoted the same way, flattened, so that
-  width is also the arc length of the curve.
+  width is also the arc length of the curve. Entering a width and height directly
+  skips that step and drives the same geometry, which is how you model a panel
+  whose aspect ratio isn't in the list. Either way the figure is the *active image
+  area*, and the bezel is added around it — type 598 mm and you get 598 mm of
+  picture. Switching between the two modes carries the current size across, so
+  the monitor on screen doesn't jump.
 * **Curve depth (sagitta)** — for radius *R* the panel wraps through `θ = width/R`
   radians and its edges sit `R(1 − cos(θ/2))` closer to you than its centre.
 * **Field of view** — the angle the panel subtends from the seated eye position,
