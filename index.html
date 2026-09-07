@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Monitor Visualizer — see your screen at real scale</title>
+<meta name="description" content="Enter a monitor's diagonal, aspect ratio and curvature and see it at true scale on a desk, with a seated person for reference." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🖥️</text></svg>" />
+<link rel="stylesheet" href="styles.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+  <div id="app">
+    <canvas id="view"></canvas>
+
+    <div id="loading"><div class="spinner"></div><p>Loading 3D scene…</p></div>
+
+    <button id="panel-toggle" aria-expanded="true" aria-controls="panel" title="Show/hide controls">☰</button>
+
+    <aside id="panel">
+      <header>
+        <h1>Monitor Visualizer</h1>
+        <p class="sub">Real-scale preview of a monitor on a desk</p>
+      </header>
+
+      <section>
+        <h2>Preset</h2>
+        <div class="row">
+          <select id="preset" aria-label="Monitor preset"></select>
+        </div>
+      </section>
+
+      <section>
+        <h2>Screen</h2>
+
+        <label class="field">
+          <span class="label">Diagonal <output id="diagonal-out"></output></span>
+          <input type="range" id="diagonal" min="13" max="65" step="0.5" value="27" />
+        </label>
+
+        <label class="field">
+          <span class="label">Aspect ratio</span>
+          <select id="aspect">
+            <option value="4:3">4:3 — classic</option>
+            <option value="3:2">3:2</option>
+            <option value="16:10">16:10</option>
+            <option value="16:9" selected>16:9 — widescreen</option>
+            <option value="21:9">21:9 — ultrawide</option>
+            <option value="32:9">32:9 — super ultrawide</option>
+            <option value="32:10">32:10</option>
+          </select>
+        </label>
+
+        <label class="field checkbox">
+          <input type="checkbox" id="curved" />
+          <span>Curved screen</span>
+        </label>
+
+        <label class="field" id="curve-field">
+          <span class="label">Curvature <output id="curve-out"></output></span>
+          <input type="range" id="curve" min="500" max="4000" step="50" value="1800" />
+          <span class="hint">Smaller radius = more aggressive curve (800R is very curved, 1800R is typical, 4000R is gentle).</span>
+        </label>
+
+        <label class="field">
+          <span class="label">Resolution</span>
+          <select id="resolution">
+            <option value="1920x1080">1920 × 1080 (FHD)</option>
+            <option value="2560x1440" selected>2560 × 1440 (QHD)</option>
+            <option value="3840x2160">3840 × 2160 (4K UHD)</option>
+            <option value="2560x1080">2560 × 1080 (UW FHD)</option>
+            <option value="3440x1440">3440 × 1440 (UW QHD)</option>
+            <option value="3840x1600">3840 × 1600 (UW QHD+)</option>
+            <option value="5120x2160">5120 × 2160 (5K2K)</option>
+            <option value="3840x1080">3840 × 1080 (DFHD)</option>
+            <option value="5120x1440">5120 × 1440 (DQHD)</option>
+            <option value="7680x2160">7680 × 2160 (DUHD)</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span class="label">Bezel <output id="bezel-out"></output></span>
+          <input type="range" id="bezel" min="0" max="25" step="1" value="7" />
+        </label>
+      </section>
+
+      <section>
+        <h2>Placement</h2>
+
+        <label class="field">
+          <span class="label">Screen bottom above desk <output id="riser-out"></output></span>
+          <input type="range" id="riser" min="0" max="35" step="0.5" value="8" />
+        </label>
+
+        <label class="field">
+          <span class="label">Tilt <output id="tilt-out"></output></span>
+          <input type="range" id="tilt" min="-10" max="25" step="1" value="5" />
+        </label>
+
+        <label class="field">
+          <span class="label">Desk height <output id="deskHeight-out"></output></span>
+          <input type="range" id="deskHeight" min="55" max="110" step="0.5" value="74" />
+        </label>
+
+        <label class="field">
+          <span class="label">Desk depth <output id="deskDepth-out"></output></span>
+          <input type="range" id="deskDepth" min="45" max="100" step="1" value="75" />
+        </label>
+      </section>
+
+      <section>
+        <h2>Person</h2>
+
+        <label class="field">
+          <span class="label">Height <output id="personHeight-out"></output></span>
+          <input type="range" id="personHeight" min="140" max="210" step="1" value="175" />
+        </label>
+
+        <label class="field">
+          <span class="label">Eye-to-screen distance <output id="distance-out"></output></span>
+          <input type="range" id="distance" min="30" max="150" step="1" value="70" />
+        </label>
+
+        <label class="field checkbox">
+          <input type="checkbox" id="showPerson" checked />
+          <span>Show person &amp; chair</span>
+        </label>
+      </section>
+
+      <section>
+        <h2>View</h2>
+        <div class="views" role="group" aria-label="Camera views">
+          <button type="button" data-view="orbit" class="active">Orbit</button>
+          <button type="button" data-view="eye">Eye level</button>
+          <button type="button" data-view="front">Front</button>
+          <button type="button" data-view="side">Side</button>
+          <button type="button" data-view="top">Top</button>
+        </div>
+
+        <label class="field">
+          <span class="label">On screen</span>
+          <select id="content">
+            <option value="desktop" selected>Desktop</option>
+            <option value="grid">Test grid</option>
+            <option value="photo">Photo</option>
+            <option value="game">Game</option>
+            <option value="off">Powered off</option>
+          </select>
+        </label>
+
+        <div class="toggles">
+          <label class="field checkbox">
+            <input type="checkbox" id="guides" />
+            <span>Field-of-view guides</span>
+          </label>
+          <label class="field checkbox">
+            <input type="checkbox" id="units" />
+            <span>Metric units</span>
+          </label>
+        </div>
+      </section>
+
+      <section id="stats">
+        <h2>Numbers</h2>
+        <dl>
+          <div><dt>Panel size</dt><dd id="st-size">—</dd></div>
+          <div><dt>Screen area</dt><dd id="st-area">—</dd></div>
+          <div><dt>Pixel density</dt><dd id="st-ppi">—</dd></div>
+          <div><dt>Curve depth</dt><dd id="st-sagitta">—</dd></div>
+          <div><dt>Wrap angle</dt><dd id="st-wrap">—</dd></div>
+          <div><dt>Horizontal FOV</dt><dd id="st-hfov">—</dd></div>
+          <div><dt>Vertical FOV</dt><dd id="st-vfov">—</dd></div>
+          <div><dt>Eye vs. screen top</dt><dd id="st-eye">—</dd></div>
+        </dl>
+        <p class="note" id="st-note"></p>
+      </section>
+
+      <footer>
+        <button type="button" id="share">Copy shareable link</button>
+        <button type="button" id="reset">Reset</button>
+        <p class="tip">Drag to orbit · scroll to zoom · right-drag to pan</p>
+      </footer>
+    </aside>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
