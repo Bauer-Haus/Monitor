@@ -6,7 +6,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 import { state, decodeHash, HUMAN_HFOV } from './config.js';
 import { buildRoom, Desk } from './room.js';
-import { Monitor } from './monitor.js';
+import { MonitorRig } from './monitor.js';
 import { Person } from './person.js';
 import { Guides } from './guides.js';
 import { initUI, writeControls, refreshLabels, refreshStats, syncHash } from './ui.js';
@@ -70,7 +70,7 @@ buildRoom(scene);
 const desk = new Desk();
 scene.add(desk.group);
 
-const monitor = new Monitor();
+const monitor = new MonitorRig();
 scene.add(monitor.group);
 
 const person = new Person();
@@ -95,7 +95,8 @@ function rebuild() {
   const deskDepth = state.deskDepth / 100;
 
   monitor.group.position.set(0, deskTop, 0);
-  const m = monitor.update(state);
+  const layout = monitor.update(state);
+  const m = layout.m;
 
   const deskWidth = state.deskWidth / 100;
   desk.update(deskTop, deskDepth, deskWidth, DESK_BACK_Z);
@@ -106,17 +107,21 @@ function rebuild() {
   updatePersonVisibility();
 
   // world-space landmarks
-  monitor.panelPivot.updateMatrixWorld(true);
-  const centre = monitor.panelPivot.getWorldPosition(new THREE.Vector3());
-  const topY = centre.y + Math.cos(THREE.MathUtils.degToRad(state.tilt)) * (m.height / 2);
-  const bottomY = centre.y - Math.cos(THREE.MathUtils.degToRad(state.tilt)) * (m.height / 2);
+  monitor.group.updateMatrixWorld(true);
+  const centre = monitor.primary.getWorldPosition(new THREE.Vector3());   // the panel you face
+  const tiltCos = Math.cos(THREE.MathUtils.degToRad(state.tilt));
+  const topY = deskTop + layout.rowTop * tiltCos;
+  const bottomY = deskTop + layout.rowBottom * tiltCos;
+
+  // the whole arrangement, for framing and for the guides
+  const rigCentre = new THREE.Vector3(0, deskTop + (layout.imageTop + layout.imageBottom) / 2, 0);
 
   const eye = new THREE.Vector3(0, eyeY, eyeZ);
   guides.setVisible(state.guides);
-  if (state.guides) guides.update(eye, monitor.panelPivot, m);
+  if (state.guides) guides.update(eye, monitor.panels, m);
 
   // shadow + camera framing follow the size of the setup
-  const span = Math.max(1.6, m.width * 0.8 + 1.2, deskWidth * 0.6 + 0.4);
+  const span = Math.max(1.6, layout.spanX * 0.7 + 1.0, deskWidth * 0.6 + 0.4);
   sc.left = -span; sc.right = span; sc.top = span; sc.bottom = -1.2;
   sc.updateProjectionMatrix();
 
@@ -126,10 +131,12 @@ function rebuild() {
     screenTopY: topY,
     screenBottomY: bottomY,
     distance: Math.hypot(eyeZ - centre.z, eyeY - centre.y),
+    layout,
+    deskTop,
   });
   syncHash();
 
-  lastInfo = { m, centre, eye, deskTop };
+  lastInfo = { m, centre: rigCentre, eye, deskTop, layout };
   return lastInfo;
 }
 
@@ -180,7 +187,9 @@ function applyView(view, info) {
 
   // everything worth seeing sits inside this sphere
   const focus = new THREE.Vector3(0, deskTop * 0.75, 0.45);
-  const radius = Math.max(m.width, (state.deskWidth / 100) * 0.8, 1.1) * 0.5 + 0.75;
+  const layout = info.layout;
+  const rigH = layout.imageTop - layout.imageBottom;
+  const radius = Math.max(layout.spanX, rigH, (state.deskWidth / 100) * 0.8, 1.1) * 0.5 + 0.75;
 
   const place = (fov, azimuthDeg, elevationDeg, target, r = radius) => {
     camera.fov = fov;
@@ -216,19 +225,19 @@ function applyView(view, info) {
     case 'front': {
       // Head-on, from just high enough to see over the person.
       const headTop = eye.y + 0.14;
-      const bottomEdge = centre.y - Math.cos(THREE.MathUtils.degToRad(state.tilt)) * (m.height / 2);
+      const bottomEdge = deskTop + layout.rowBottom * Math.cos(THREE.MathUtils.degToRad(state.tilt));
       const clearance = Math.max(0, headTop + 0.16 - bottomEdge) / Math.max(0.25, eye.z + 0.12 - centre.z);
       const elevation = state.showPerson
         ? THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(Math.atan(clearance)), 6, 44)
         : 6;
-      place(38, 0, elevation, new THREE.Vector3(0, centre.y - 0.12, centre.z), Math.max(m.width * 0.62, 0.42) + 0.3);
+      place(38, 0, elevation, new THREE.Vector3(0, centre.y - 0.12, centre.z), Math.max(layout.spanX * 0.55, rigH * 0.6, 0.42) + 0.3);
       break;
     }
     case 'side':
-      place(38, 90, 9, new THREE.Vector3(0, centre.y - 0.22, 0.42), Math.max(m.width * 0.3, 0.55) + 0.5);
+      place(38, 90, 9, new THREE.Vector3(0, centre.y - 0.22, 0.42), Math.max(rigH * 0.6, 0.55) + 0.5);
       break;
     case 'top':
-      place(45, 0.4, 84, new THREE.Vector3(0, 0.25, 0.45), Math.max(m.width * 0.5, 0.8) + 0.3);
+      place(45, 0.4, 84, new THREE.Vector3(0, 0.25, 0.45), Math.max(layout.spanX * 0.5, 0.8) + 0.3);
       break;
     default:
       place(40, 36, 19, focus);

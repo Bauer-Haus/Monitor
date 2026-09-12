@@ -1,11 +1,13 @@
 // DOM wiring: reads the controls into `state`, writes the derived numbers back out.
 
-import { state, DEFAULTS, PRESETS, screenMetrics, resolutionOf, matchPreset, encodeHash, HUMAN_HFOV } from './config.js';
+import { state, DEFAULTS, PRESETS, screenMetrics, resolutionOf, matchPreset, applyPreset, encodeHash, HUMAN_HFOV } from './config.js';
+import { rigLayout } from './rig.js';
 
 const $ = (id) => document.getElementById(id);
 
-const RANGES = ['diagonal', 'curve', 'bezel', 'riser', 'tilt', 'deskWidth', 'deskHeight', 'deskDepth', 'personHeight', 'distance'];
-const SELECTS = ['sizeMode', 'aspect', 'resolution', 'content'];
+const RANGES = ['diagonal', 'curve', 'bezel', 'arrayAngle', 'gap', 'riser', 'tilt', 'deskWidth', 'deskHeight', 'deskDepth', 'personHeight', 'distance'];
+const SELECTS = ['sizeMode', 'aspect', 'resolution', 'content', 'count', 'sideOrient', 'topMonitor'];
+const NUMBER_SELECTS = new Set(['count']);   // selects whose value is a number, not a label
 const CHECKS = ['curved', 'showPerson', 'guides', 'units'];
 const NUMBERS = ['panelW', 'panelH'];
 
@@ -80,18 +82,29 @@ function fmtArea(sqm, metric) {
     : `${(sqm * M_TO_IN * M_TO_IN).toFixed(0)} in²`;
 }
 
-/** Angle subtended by the whole screen, seen from `distance` metres in front of its centre. */
-function fieldOfView(m, distance) {
-  // measured to where the edges actually sit, so a curve's forward wrap counts
-  const edgeX = isFinite(m.radius) ? m.radius * Math.sin(m.wrap / 2) : m.width / 2;
-  const h = Math.atan2(edgeX, Math.max(0.05, distance - m.sagitta));
-  const v = Math.atan2(m.height / 2, Math.max(0.05, distance));
-  return { h: h * 2 * (180 / Math.PI), v: v * 2 * (180 / Math.PI) };
+/**
+ * Angle the whole arrangement subtends from the seat. Every image edge is
+ * measured where it actually sits, so a curve's forward wrap and a turned-in
+ * side panel both count.
+ */
+function fieldOfView(layout, eyeY, eyeZ, deskTop) {
+  const DEG = 180 / Math.PI;
+  let minB = Infinity;
+  let maxB = -Infinity;
+  for (const e of layout.edges) {
+    const bearing = Math.atan2(e.x, Math.max(0.05, eyeZ - e.z));
+    minB = Math.min(minB, bearing);
+    maxB = Math.max(maxB, bearing);
+  }
+  const dz = Math.max(0.05, eyeZ);
+  const v = Math.atan2(deskTop + layout.imageTop - eyeY, dz)
+          - Math.atan2(deskTop + layout.imageBottom - eyeY, dz);
+  return { h: (maxB - minB) * DEG, v: v * DEG };
 }
 
 export function readControls() {
   for (const id of RANGES) state[id] = Number($(id).value);
-  for (const id of SELECTS) state[id] = $(id).value;
+  for (const id of SELECTS) state[id] = NUMBER_SELECTS.has(id) ? Number($(id).value) : $(id).value;
   for (const id of CHECKS) state[id] = $(id).checked;
   readNumberInputs();
 }
@@ -119,6 +132,13 @@ export function refreshLabels() {
     : `${Math.floor(state.personHeight / 2.54 / 12)}′${Math.round((state.personHeight / 2.54) % 12)}″`;
   $('distance-out').textContent = metric ? `${state.distance} cm` : `${(state.distance / 2.54).toFixed(0)} in`;
   $('curve-field').classList.toggle('disabled', !state.curved);
+  $('arrayAngle-out').textContent = `${state.arrayAngle}°`;
+  $('gap-out').textContent = metric ? `${state.gap} mm` : `${(state.gap / 25.4).toFixed(2)} in`;
+
+  const multi = Number(state.count) > 1;
+  $('angle-field').classList.toggle('disabled', !multi);
+  $('sideOrient-field').classList.toggle('disabled', !multi);
+  $('gap-field').classList.toggle('disabled', !multi && state.topMonitor === 'none');
 
   const manual = state.sizeMode === 'manual';
   $('size-diagonal').hidden = manual;
@@ -128,14 +148,21 @@ export function refreshLabels() {
 /** @param {{eyeY:number, screenTopY:number, screenBottomY:number, distance?:number}} scene */
 export function refreshStats(scene) {
   const metric = state.units;
-  const m = screenMetrics(state);
+  const layout = scene.layout ?? rigLayout(state);
+  const m = layout.m;
   const res = resolutionOf(state.resolution);
   const distance = scene.distance ?? state.distance / 100;
-  const fov = fieldOfView(m, distance);
+  const panels = layout.items.length;
+  const fov = fieldOfView(layout, scene.eyeY, state.distance / 100, scene.deskTop ?? 0.74);
 
   $('st-size').textContent = `${fmtLen(m.width, metric)} × ${fmtLen(m.height, metric)}`;
   $('st-diagonal').textContent = `${fmtLen(m.diag, metric)} · ${m.ratio.toFixed(2)}:1`;
-  $('st-area').textContent = fmtArea(m.width * m.height, metric);
+  $('st-span').textContent = panels > 1
+    ? `${panels} panels · ${fmtLen(layout.spanX, metric)} wide`
+    : fmtLen(layout.spanX, metric) + ' wide';
+  $('st-area').textContent = panels > 1
+    ? `${fmtArea(m.width * m.height * panels, metric)} total`
+    : fmtArea(m.width * m.height, metric);
 
   const ppi = Math.hypot(res.w, res.h) / m.diagonalIn;
   const pitch = (m.width * 1000) / res.w;
@@ -149,8 +176,7 @@ export function refreshStats(scene) {
   $('st-vfov').textContent = `${fov.v.toFixed(1)}°`;
 
   const deskWidth = state.deskWidth / 100;
-  const panelSpan = m.chord + (state.bezel / 1000) * 2;
-  const slack = deskWidth - panelSpan;
+  const slack = deskWidth - layout.spanX;
   $('st-desk').textContent = slack >= 0
     ? `${fmtLen(slack / 2, metric)} spare each side`
     : `overhangs by ${fmtLen(-slack / 2, metric)} each side`;
@@ -166,8 +192,10 @@ export function refreshStats(scene) {
   } else if (state.curved && distance < m.radius * 0.45) {
     notes.push('You are much closer than the curve radius, so the edges wrap noticeably around you.');
   }
-  if (slack < 0) notes.push('The monitor is wider than the desk — it would hang over both edges.');
-  else if (slack < 0.1) notes.push('The monitor only just fits the desk width.');
+  if (slack < 0) notes.push(panels > 1
+    ? 'The array is wider than the desk — the outer panels would hang over the edges.'
+    : 'The monitor is wider than the desk — it would hang over both edges.');
+  else if (slack < 0.1) notes.push('It only just fits the desk width.');
   if (fov.h > 100) notes.push('Over 100° wide: expect to turn your head to reach the edges.');
   else if (fov.h < 25) notes.push('Under 25° wide: the screen occupies a small part of your vision — you could sit closer.');
   if (scene.eyeY < scene.screenBottomY) notes.push('Your eyes are below the bottom edge — the screen is mounted quite high.');
@@ -219,7 +247,7 @@ export function initUI({ onChange, onView, onReset, onLayout }) {
   presetSel.addEventListener('change', () => {
     const preset = PRESETS.find((p) => p.id === presetSel.value);
     if (!preset || !preset.p) return;
-    Object.assign(state, { sizeMode: 'diagonal' }, preset.p);
+    applyPreset(preset, state);
     writeControls();
     onChange();
   });

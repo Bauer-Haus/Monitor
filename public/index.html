@@ -117,6 +117,47 @@
       </section>
 
       <section>
+        <h2>Arrangement</h2>
+
+        <label class="field">
+          <span class="label">Monitors across</span>
+          <select id="count">
+            <option value="1" selected>1</option>
+            <option value="2">2 — side by side</option>
+            <option value="3">3 — centre plus wings</option>
+          </select>
+        </label>
+
+        <label class="field" id="angle-field">
+          <span class="label">Angled in <output id="arrayAngle-out"></output></span>
+          <input type="range" id="arrayAngle" min="0" max="60" step="1" value="25" />
+          <span class="hint">How far each panel turns towards its neighbour.</span>
+        </label>
+
+        <label class="field" id="sideOrient-field">
+          <span class="label">Outer monitors</span>
+          <select id="sideOrient">
+            <option value="landscape" selected>Landscape</option>
+            <option value="portrait">Portrait — pivoted 90°</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span class="label">Monitor above</span>
+          <select id="topMonitor">
+            <option value="none" selected>None</option>
+            <option value="landscape">Landscape</option>
+            <option value="portrait">Portrait — pivoted 90°</option>
+          </select>
+        </label>
+
+        <label class="field" id="gap-field">
+          <span class="label">Gap between panels <output id="gap-out"></output></span>
+          <input type="range" id="gap" min="0" max="60" step="1" value="8" />
+        </label>
+      </section>
+
+      <section>
         <h2>Placement</h2>
 
         <label class="field">
@@ -202,6 +243,7 @@
         <h2>Numbers</h2>
         <dl>
           <div><dt>Image area</dt><dd id="st-size">—</dd></div>
+          <div><dt>Array span</dt><dd id="st-span">—</dd></div>
           <div><dt>Diagonal</dt><dd id="st-diagonal">—</dd></div>
           <div><dt>Screen area</dt><dd id="st-area">—</dd></div>
           <div><dt>Pixel density</dt><dd id="st-ppi">—</dd></div>

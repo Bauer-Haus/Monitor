@@ -1,7 +1,9 @@
-// The monitor: chassis (curved or flat), bezel, emissive screen surface and stand.
+// The monitors: chassis (curved or flat), bezel, emissive screen surface and
+// stand, assembled into however many panels the arrangement calls for.
 
 import * as THREE from 'three';
-import { screenMetrics, screenPoint } from './config.js';
+import { screenPoint } from './config.js';
+import { rigLayout } from './rig.js';
 import { makeScreenTexture } from './screenTexture.js';
 import { roundedBox } from './geometry.js';
 
@@ -87,111 +89,162 @@ function surfaceGeometry(m, width, height, lift) {
   return geo;
 }
 
-export class Monitor {
+/** One panel: chassis, bezel, screen and the housing behind it, centred on its image area. */
+function buildPanel(m, state, portrait, store) {
+  const group = new THREE.Group();
+
+  const bezel = state.bezel / 1000;
+  const outerW = m.width + bezel * 2;
+  const outerH = m.height + bezel * 2;
+
+  const shape = chassisShape(m, CHASSIS_DEPTH, outerW / m.width);
+  const chassis = new THREE.Mesh(extrudeUpright(shape, outerH), bodyMaterial);
+  chassis.castShadow = true;
+  chassis.receiveShadow = true;
+  store.push(chassis.geometry);
+  group.add(chassis);
+
+  const bezelGeo = surfaceGeometry(m, outerW, outerH, BEZEL_LIFT);
+  store.push(bezelGeo);
+  group.add(new THREE.Mesh(bezelGeo, bezelMaterial));
+
+  const screenGeo = surfaceGeometry(m, m.width, m.height, SCREEN_LIFT);
+  // A pivoted panel shows a portrait desktop, so the picture is drawn at the
+  // proportions it ends up with on the wall and turned to meet the rolled UVs.
+  const texture = makeScreenTexture(state.content, portrait ? m.height / m.width : m.width / m.height);
+  if (portrait) {
+    texture.center.set(0.5, 0.5);
+    texture.rotation = Math.PI / 2;
+  }
+  const screenMat = new THREE.MeshBasicMaterial({ map: texture, toneMapped: true });
+  store.push(screenGeo, screenMat, texture);
+  group.add(new THREE.Mesh(screenGeo, screenMat));
+
+  const housingW = Math.min(m.width * 0.55, 0.42);
+  const housingH = Math.min(m.height * 0.62, 0.24);
+  const housingGeo = roundedBox(housingW, housingH, HOUSING_DEPTH, 0.02, 0.006);
+  const housing = new THREE.Mesh(housingGeo, housingMaterial);
+  housing.position.set(0, 0, -CHASSIS_DEPTH - HOUSING_DEPTH / 2 + 0.004);
+  housing.castShadow = true;
+  store.push(housingGeo);
+  group.add(housing);
+
+  return group;
+}
+
+/** Foot, column and arm for one panel, built in that panel's own frame. */
+function buildStand(m, height, store) {
+  const stand = new THREE.Group();
+  const columnZ = -CHASSIS_DEPTH - HOUSING_DEPTH - 0.028;
+
+  const baseW = THREE.MathUtils.clamp(m.width * 0.28, 0.16, 0.34);
+  const baseD = THREE.MathUtils.clamp(m.height * 0.42, 0.13, 0.24);
+  const baseGeo = new THREE.CylinderGeometry(baseW / 2, baseW / 2, 0.016, 32);
+  baseGeo.scale(1, 1, baseD / baseW);
+  const base = new THREE.Mesh(baseGeo, standMaterial);
+  base.position.set(0, 0.008, columnZ);
+  base.castShadow = true;
+  base.receiveShadow = true;
+  store.push(baseGeo);
+  stand.add(base);
+
+  const neckH = Math.max(0.04, height);
+  const neckGeo = new THREE.BoxGeometry(0.075, neckH, 0.03);
+  const neck = new THREE.Mesh(neckGeo, standMaterial);
+  neck.position.set(0, neckH / 2, columnZ);
+  neck.castShadow = true;
+  store.push(neckGeo);
+  stand.add(neck);
+
+  const armBack = columnZ - 0.02;
+  const armFront = -CHASSIS_DEPTH * 0.4;
+  const armGeo = new THREE.BoxGeometry(0.075, 0.05, armFront - armBack);
+  const arm = new THREE.Mesh(armGeo, standMaterial);
+  arm.position.set(0, neckH, (armFront + armBack) / 2);
+  arm.castShadow = true;
+  store.push(armGeo);
+  stand.add(arm);
+
+  return stand;
+}
+
+/**
+ * The whole arrangement: one to three panels across, optionally a second row,
+ * each on its own stand. The group's origin is the desk surface at the centre
+ * seam of the main row.
+ */
+export class MonitorRig {
   constructor() {
-    this.group = new THREE.Group();          // origin at the desk surface, screen centre at x=0,z=0
-    this.panelPivot = new THREE.Group();
-    this.stand = new THREE.Group();
-    this.group.add(this.stand, this.panelPivot);
+    this.group = new THREE.Group();
+    this.panels = [];     // [{ pivot, item }] in layout order
+    this.primary = null;  // the panel you sit square-on to
+    this.layout = null;
     this.disposables = [];
-    this.screenCentre = new THREE.Vector3();
-    this.metrics = null;
   }
 
   dispose() {
     for (const d of this.disposables) d.dispose();
     this.disposables.length = 0;
-    this.panelPivot.clear();
-    this.stand.clear();
+    this.group.clear();
+    this.panels.length = 0;
   }
 
   update(state) {
     this.dispose();
-    const m = screenMetrics(state);
+    const layout = rigLayout(state);
+    const { m } = layout;
+    this.layout = layout;
     this.metrics = m;
 
-    // The metrics describe the active image area, so the bezel is added around
-    // it: a 598 mm panel renders 598 mm of picture, exactly as typed.
-    const bezel = state.bezel / 1000;
-    const outerW = m.width + bezel * 2;
-    const outerH = m.height + bezel * 2;
-    const riser = state.riser / 100;
+    const tilt = THREE.MathUtils.degToRad(state.tilt);
 
-    // ---- chassis -------------------------------------------------------
-    const shape = chassisShape(m, CHASSIS_DEPTH, outerW / m.width);
-    const chassis = new THREE.Mesh(extrudeUpright(shape, outerH), bodyMaterial);
-    chassis.castShadow = true;
-    chassis.receiveShadow = true;
-    this.disposables.push(chassis.geometry);
-    this.panelPivot.add(chassis);
+    for (const item of layout.items) {
+      const pivot = new THREE.Group();
+      pivot.rotation.order = 'YXZ';   // roll in the panel's own frame, then tilt, then turn
+      pivot.position.set(item.x, item.y, item.z);
+      pivot.rotation.set(-tilt, item.yaw, item.portrait ? -Math.PI / 2 : 0);
+      pivot.add(buildPanel(m, state, item.portrait, this.disposables));
+      this.group.add(pivot);
+      this.panels.push({ pivot, item });
+      if (item.primary) this.primary = pivot;
 
-    // ---- bezel face (matte black frame just in front of the chassis) ----
-    const bezelGeo = surfaceGeometry(m, outerW, outerH, BEZEL_LIFT);
-    const bezelMesh = new THREE.Mesh(bezelGeo, bezelMaterial);
-    this.disposables.push(bezelGeo);
-    this.panelPivot.add(bezelMesh);
+      if (item.row === 0) {
+        const stand = buildStand(m, item.y, this.disposables);
+        stand.position.set(item.x, 0, item.z);
+        stand.rotation.y = item.yaw;
+        this.group.add(stand);
+      }
+    }
 
-    // ---- active screen -------------------------------------------------
-    const screenW = m.width;
-    const screenH = m.height;
-    const screenGeo = surfaceGeometry(m, screenW, screenH, SCREEN_LIFT);
-    const texture = makeScreenTexture(state.content, screenW / screenH);
-    const screenMat = new THREE.MeshBasicMaterial({ map: texture, toneMapped: true });
-    const screen = new THREE.Mesh(screenGeo, screenMat);
-    this.disposables.push(screenGeo, screenMat, texture);
-    this.panelPivot.add(screen);
+    // The second row rides a pole set back behind the main row rather than a
+    // foot of its own, which is how stacked monitors are actually mounted.
+    const top = layout.items.find((it) => it.row === 1);
+    if (top) {
+      const poleZ = -CHASSIS_DEPTH - HOUSING_DEPTH - 0.1;
+      const poleGeo = new THREE.CylinderGeometry(0.028, 0.032, top.y, 16);
+      const pole = new THREE.Mesh(poleGeo, standMaterial);
+      pole.position.set(0, top.y / 2, poleZ);
+      pole.castShadow = true;
+      this.disposables.push(poleGeo);
+      this.group.add(pole);
 
-    // ---- rear housing --------------------------------------------------
-    // A 1 inch panel needs somewhere to put the electronics, so slim monitors
-    // carry a shallow raised block across the middle of the back.
-    const housingW = Math.min(m.width * 0.55, 0.42);
-    const housingH = Math.min(m.height * 0.62, 0.24);
-    const housingGeo = roundedBox(housingW, housingH, HOUSING_DEPTH, 0.02, 0.006);
-    const housing = new THREE.Mesh(housingGeo, housingMaterial);
-    housing.position.set(0, 0, -CHASSIS_DEPTH - HOUSING_DEPTH / 2 + 0.004);
-    housing.castShadow = true;
-    this.disposables.push(housingGeo);
-    this.panelPivot.add(housing);
+      const footGeo = new THREE.CylinderGeometry(0.11, 0.13, 0.018, 28);
+      const foot = new THREE.Mesh(footGeo, standMaterial);
+      foot.position.set(0, 0.009, poleZ);
+      foot.castShadow = true;
+      foot.receiveShadow = true;
+      this.disposables.push(footGeo);
+      this.group.add(foot);
 
-    // ---- stand ---------------------------------------------------------
-    const columnZ = -CHASSIS_DEPTH - HOUSING_DEPTH - 0.028;
+      const armGeo = new THREE.BoxGeometry(0.07, 0.05, Math.abs(poleZ) - CHASSIS_DEPTH * 0.4);
+      const arm = new THREE.Mesh(armGeo, standMaterial);
+      arm.position.set(0, top.y, (poleZ - CHASSIS_DEPTH * 0.4) / 2);
+      arm.castShadow = true;
+      this.disposables.push(armGeo);
+      this.group.add(arm);
+    }
 
-    const baseW = THREE.MathUtils.clamp(m.width * 0.28, 0.16, 0.34);
-    const baseD = THREE.MathUtils.clamp(m.height * 0.42, 0.13, 0.24);
-    const baseGeo = new THREE.CylinderGeometry(baseW / 2, baseW / 2, 0.016, 32);
-    baseGeo.scale(1, 1, baseD / baseW);
-    const base = new THREE.Mesh(baseGeo, standMaterial);
-    base.position.set(0, 0.008, columnZ);
-    base.castShadow = true;
-    base.receiveShadow = true;
-    this.disposables.push(baseGeo);
-    this.stand.add(base);
-
-    const neckH = Math.max(0.04, riser + m.height * 0.35);
-    const neckGeo = new THREE.BoxGeometry(0.075, neckH, 0.03);
-    const neck = new THREE.Mesh(neckGeo, standMaterial);
-    neck.position.set(0, neckH / 2, columnZ);
-    neck.castShadow = true;
-    this.disposables.push(neckGeo);
-    this.stand.add(neck);
-
-    // bridges the column to the back of the panel; its front end hides inside the body
-    const armBack = columnZ - 0.02;
-    const armFront = -CHASSIS_DEPTH * 0.4;
-    const armGeo = new THREE.BoxGeometry(0.075, 0.05, armFront - armBack);
-    const arm = new THREE.Mesh(armGeo, standMaterial);
-    arm.position.set(0, riser + m.height * 0.35, (armFront + armBack) / 2);
-    arm.castShadow = true;
-    this.disposables.push(armGeo);
-    this.stand.add(arm);
-
-    // ---- placement -----------------------------------------------------
-    // `riser` is the height of the image area's bottom edge; lift the panel if
-    // the bezel below it would otherwise sink into the desk.
-    this.panelPivot.position.set(0, Math.max(riser + m.height / 2, outerH / 2), 0);
-    this.panelPivot.rotation.x = -THREE.MathUtils.degToRad(state.tilt);
-
-    this.screenCentre.set(0, this.group.position.y + this.panelPivot.position.y, this.group.position.z);
-    return m;
+    if (!this.primary) this.primary = this.panels[0].pivot;
+    return layout;
   }
 }

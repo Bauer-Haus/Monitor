@@ -22,11 +22,11 @@ export class Guides {
   setVisible(v) { this.group.visible = v; }
 
   /**
-   * @param {THREE.Vector3} eye     eye position, world space
-   * @param {THREE.Object3D} pivot  the monitor's panel pivot (screen centre, already tilted)
-   * @param {object} m              screen metrics
+   * @param {THREE.Vector3} eye   eye position, world space
+   * @param {Array<{pivot: THREE.Object3D, item: object}>} panels  every panel in the rig
+   * @param {object} m            screen metrics
    */
-  update(eye, pivot, m) {
+  update(eye, panels, m) {
     this.dispose();
 
     const add = (points, material) => {
@@ -35,30 +35,34 @@ export class Guides {
       this.group.add(new THREE.Line(geo, material));
     };
 
-    const worldEdge = (u, y) => {
+    // A pivoted panel carries its curve vertically, so walk the arc along the
+    // panel's own local x either way and let its transform place the points.
+    const worldPoint = (pivot, u, offset) => {
       const p = screenPoint(u, m);
-      return pivot.localToWorld(new THREE.Vector3(p.x, y, p.z));
+      return pivot.localToWorld(new THREE.Vector3(p.x, offset, p.z));
     };
 
-    const left = worldEdge(-0.5, 0);
-    const right = worldEdge(0.5, 0);
-    const centre = worldEdge(0, 0);
-    const top = worldEdge(0, m.height / 2);
-    const bottom = worldEdge(0, -m.height / 2);
+    let leftMost = null;
+    let rightMost = null;
 
-    add([eye, left], MAIN);
-    add([eye, right], MAIN);
-    add([eye, top], SOFT);
-    add([eye, bottom], SOFT);
-    add([eye, centre], SOFT);
+    for (const { pivot, item } of panels) {
+      const arc = [];
+      for (let i = 0; i <= 48; i++) arc.push(worldPoint(pivot, -0.5 + i / 48, 0));
+      add(arc, MAIN);
 
-    // the screen's horizontal arc, so the curve itself is legible from above
-    const arc = [];
-    for (let i = 0; i <= 64; i++) arc.push(worldEdge(-0.5 + i / 64, 0));
-    add(arc, MAIN);
+      for (const u of [-0.5, 0.5]) {
+        const edge = worldPoint(pivot, u, 0);
+        add([eye, edge], item.row === 0 ? MAIN : SOFT);
+        if (!leftMost || edge.x < leftMost.x) leftMost = edge;
+        if (!rightMost || edge.x > rightMost.x) rightMost = edge;
+      }
+    }
 
-    // distance line dropped to the floor at both ends
-    add([new THREE.Vector3(eye.x, 0.004, eye.z), new THREE.Vector3(centre.x, 0.004, centre.z)], SOFT);
+    // straight ahead, and the distance dropped to the floor
+    const ahead = new THREE.Vector3(0, eye.y, 0);
+    add([eye, ahead], SOFT);
+    add([new THREE.Vector3(eye.x, 0.004, eye.z), new THREE.Vector3(0, 0.004, 0)], SOFT);
     add([eye, new THREE.Vector3(eye.x, 0.004, eye.z)], SOFT);
+    if (leftMost && rightMost) add([leftMost, rightMost], SOFT);
   }
 }

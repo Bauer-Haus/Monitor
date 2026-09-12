@@ -4,12 +4,13 @@ A small website for answering the question *"how big is that monitor, really?"*
 
 Type in a monitor's diagonal, aspect ratio and curvature and it appears at true scale
 in a 3D scene: a plain desk, a blank seated figure for reference, and the screen itself.
-Orbit around it, or drop into the seat and see what the panel actually covers from there.
+Put up to three of them side by side, pivot the outer ones to portrait, stack one above —
+then drop into the seat and see what the whole arrangement actually covers from there.
 
 ![overview](docs/preview-orbit.png)
 
-From the seat, with a 49″ 32:9 at 1000R — rendered at a 114° horizontal field of
-view, so the panel covers the same share of the frame as it would of your vision:
+From the seat, with two 34″ 21:9 curved panels — rendered at a 114° horizontal field
+of view, so they cover the same share of the frame as they would of your vision:
 
 ![eye level](docs/preview-eye.png)
 
@@ -49,10 +50,16 @@ revalidate on every load so a deploy never leaves stale code in a browser cache.
 | Placement | height above the desk, tilt |
 | Desk | width 80–300 cm, height 55–110 cm, depth 45–100 cm |
 | Person | standing height 140–210 cm, eye-to-screen distance |
+| Monitors across | 1, 2 or 3, turned in towards each other by 0–60° |
+| Outer monitors | landscape, or pivoted 90° to portrait |
+| Monitor above | none, landscape or portrait, on a pole behind the row |
+| Gap | 0–60 mm between panel bodies, horizontally and vertically |
 | View | orbit, eye level, front, side, top |
 | Guides | draws the field-of-view cone and the screen's arc |
 
-Presets cover the common sizes (24″ 16:9 through 57″ 32:9). Settings live in the URL
+Presets cover the common sizes (24″ 16:9 through 57″ 32:9) and the usual
+arrangements — dual 34″ ultrawides, triple 27″, portrait wings, a stacked pair, and a
+three-wide with one above. Settings live in the URL
 hash, so **Copy shareable link** produces a link that restores the exact setup.
 
 ## The numbers it reports
@@ -67,8 +74,12 @@ hash, so **Copy shareable link** produces a link that restores the exact setup.
   the monitor on screen doesn't jump.
 * **Curve depth (sagitta)** — for radius *R* the panel wraps through `θ = width/R`
   radians and its edges sit `R(1 − cos(θ/2))` closer to you than its centre.
-* **Field of view** — the angle the panel subtends from the seated eye position,
-  measured to the real edge positions, so the curve's forward wrap is included.
+* **Array span** — how wide the whole arrangement is, measured straight across the
+  outermost image corners. Turning the panels in makes an array physically narrower
+  while it covers *more* of your vision, because the edges come closer to you.
+* **Field of view** — the angle the panels subtend from the seated eye position,
+  measured to every panel's real edge position, so both a curve's forward wrap and a
+  turned-in side panel are included.
   It is also reported as a share of the ~114° both eyes take in at once, which is
   the field the eye-level view renders: the camera stays at the eye, so a panel
   that overflows the frame is one that genuinely overflows your vision.
@@ -91,8 +102,9 @@ public/                     everything that gets deployed
   styles.css                UI styling
   _headers                  Cloudflare Pages caching and security headers
   src/config.js             state, presets, screen maths, URL encoding
+  src/rig.js                where each panel sits: the arrangement maths
   src/main.js               scene assembly, layout, camera views, render loop
-  src/monitor.js            chassis / bezel / screen geometry and the stand
+  src/monitor.js            chassis / bezel / screen geometry, stands and poles
   src/person.js             seated mannequin and chair
   src/room.js               floor, walls and desk
   src/guides.js             field-of-view overlay lines

@@ -17,6 +17,14 @@ export const DEFAULTS = {
   curve: 1800,         // curvature radius in mm
   resolution: '2560x1440',
   bezel: 7,            // mm
+
+  // the array
+  count: 1,            // monitors side by side, 1-3
+  arrayAngle: 25,      // degrees each panel turns in towards its neighbour
+  gap: 8,              // mm between panel bodies
+  sideOrient: 'landscape', // orientation of the outer panels: 'landscape' or 'portrait'
+  topMonitor: 'none',  // second row above the centre: 'none', 'landscape' or 'portrait'
+
   riser: 8,            // cm, screen bottom above the desk surface
   tilt: 5,             // degrees, positive tilts the top away from the viewer
   deskWidth: 140,      // cm, left to right
@@ -47,6 +55,12 @@ export const PRESETS = [
   { id: '57-32-9',  name: '57" 32:9 dual-4K 1000R',          p: { diagonal: 57, aspect: '32:9',  curved: true,  curve: 1000, resolution: '7680x2160', riser: 3 } },
   { id: '27-16-10', name: '27" 16:10 — taller workhorse',    p: { diagonal: 27, aspect: '16:10', curved: false, resolution: '2560x1440', riser: 8 } },
   { id: '19-4-3',   name: '19" 4:3 — retro',                 p: { diagonal: 19, aspect: '4:3',   curved: false, resolution: '1920x1080', riser: 10 } },
+
+  { id: 'dual-34',  name: '2 × 34" 21:9 curved 1900R',        p: { count: 2, diagonal: 34, aspect: '21:9', curved: true, curve: 1900, resolution: '3440x1440', riser: 6, arrayAngle: 22, deskWidth: 220 } },
+  { id: 'triple-27', name: '3 × 27" 16:9',                    p: { count: 3, diagonal: 27, aspect: '16:9', curved: false, resolution: '2560x1440', riser: 8, arrayAngle: 28, deskWidth: 220 } },
+  { id: 'triple-27p', name: '3 × 27" — portrait wings',       p: { count: 3, diagonal: 27, aspect: '16:9', curved: false, resolution: '2560x1440', riser: 8, arrayAngle: 35, sideOrient: 'portrait', deskWidth: 200 } },
+  { id: 'stack-27', name: '27" + 27" stacked above',          p: { count: 1, diagonal: 27, aspect: '16:9', curved: false, resolution: '2560x1440', riser: 4, topMonitor: 'landscape' } },
+  { id: 'cockpit',  name: '3 × 27" + one above — cockpit',    p: { count: 3, diagonal: 27, aspect: '16:9', curved: false, resolution: '2560x1440', riser: 4, arrayAngle: 30, topMonitor: 'landscape', deskWidth: 220 } },
 ];
 
 export const state = { ...DEFAULTS };
@@ -129,11 +143,27 @@ export function decodeHash(hash, s = state) {
   return touched;
 }
 
+// The fields a preset describes. Anything here that a preset does not mention
+// goes back to its default when the preset is applied, so a three-wide portrait
+// setup does not leak into the next preset you pick. Everything else — the desk,
+// the person, the view — is yours and is left alone unless the preset says so.
+const PRESET_KEYS = [
+  'sizeMode', 'diagonal', 'aspect', 'curved', 'curve', 'resolution',
+  'riser', 'count', 'arrayAngle', 'sideOrient', 'topMonitor',
+];
+
+export function applyPreset(preset, s = state) {
+  if (!preset || !preset.p) return;
+  for (const k of PRESET_KEYS) s[k] = k in preset.p ? preset.p[k] : DEFAULTS[k];
+  for (const [k, v] of Object.entries(preset.p)) s[k] = v;   // anything extra, e.g. deskWidth
+}
+
 export function matchPreset(s = state) {
   if (s.sizeMode === 'manual') return 'custom';
   for (const preset of PRESETS) {
     if (!preset.p) continue;
-    const ok = Object.entries(preset.p).every(([k, v]) => s[k] === v);
+    const ok = PRESET_KEYS.every((k) => s[k] === (k in preset.p ? preset.p[k] : DEFAULTS[k]))
+      && Object.entries(preset.p).every(([k, v]) => s[k] === v);
     if (ok) return preset.id;
   }
   return 'custom';
